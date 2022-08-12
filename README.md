@@ -2,6 +2,8 @@
 make shifts by SpreadSheet
 
 GoogleDrive
+ご自身のドライブへコピーして使用してください。
+Please copy and use it on your drive.
 https://drive.google.com/drive/folders/149R5HcF7Rucm8KO3Y4KRZx1KAeViqOmw?usp=sharing
 
 OpenDocument
