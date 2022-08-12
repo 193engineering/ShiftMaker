@@ -15,4 +15,4 @@ https://docs.google.com/spreadsheets/d/e/2PACX-1vRIisavvigX6bvZFxKYwKbdEKokb7ljc
 <FUNCTION>
   - Make monthly schedule by standard shifts.
   - Make daily schedule.
-  - Recieve and accept requests of change by Google Form.
+  - Recieve and accept thier shift request by Google Form.
