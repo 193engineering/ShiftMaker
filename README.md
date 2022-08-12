@@ -7,6 +7,8 @@ https://drive.google.com/drive/folders/149R5HcF7Rucm8KO3Y4KRZx1KAeViqOmw?usp=sha
 OpenDocument
 https://docs.google.com/spreadsheets/d/e/2PACX-1vRIisavvigX6bvZFxKYwKbdEKokb7ljc91kLBnZoZYTcxofCuaqFD1TrUBbBPKeT_AODLCb3fd6qKSg/pub?output=ods
 
+https://script.google.com/macros/library/d/1Zm9VAIj6SunTcV3TJXmUpFtwfj3RvBJtfC1vKkYzv5kgjS7av1KJ-X0C/1
+
 <基本機能>
   ・基本シフトに合わせて月のシフト表を作成
   ・１日の勤務者ごとのシフト時間を表示
