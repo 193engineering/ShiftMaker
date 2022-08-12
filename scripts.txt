@@ -1,0 +1,371 @@
+function makeShift() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const scheduleSheet = ss.getSheetByName('schedule');
+  const today = new Date();
+  var thisYear = today.getFullYear();
+  var thisMonth = scheduleSheet.getRange(2,2).getValue();
+
+  var result = Browser.msgBox("シフト作成を実行します\\n\\n※必ずクリアしてから実行してください！\\n\\n※年を跨いで２月以降のシフトを作成する場合、\\nA2セルを手動で書き換えてください", Browser.Buttons.OK_CANCEL);
+  if (result == "ok" && thisMonth > 0 && thisMonth < 13){
+    if(thisMonth == 1) scheduleSheet.getRange(2,1).setValue(thisYear+1); // 1月シフト作成時
+    else scheduleSheet.getRange(2,1).setValue(thisYear);
+    // API呼び出しは極力少なく
+    const staffSheet = ss.getSheetByName('staff');
+    const staffLastColumn = staffSheet.getLastColumn() -1;
+    const partSheet = ss.getSheetByName('part');
+    const partLastColumn = partSheet.getLastColumn() -1;
+
+    // 最終日をcheck
+    var endOfMonth = getEndOfMonth(thisMonth);
+
+    // 日付を入力
+    var days = [];
+    for(var i=1; i <= endOfMonth ; i++){
+      days.push([i]);
+    }
+    scheduleSheet.getRange(6,2, endOfMonth, 1).setValues(days);
+
+    // 隙間の色塗り
+    scheduleSheet.getRange(5,7, endOfMonth+1, 1).setBackground('#c0c0c0');
+
+    // メンバーの列を作成
+    var staffList = staffSheet.getRange(1,2,1,staffLastColumn).getValues();
+    scheduleSheet.getRange(5,8, 1,staffList[0].length).setValues(staffList);
+    var partList = partSheet.getRange(1,2,1,partLastColumn).getValues();
+    scheduleSheet.getRange(5,8 + staffList[0].length, 1,partList[0].length).setValues(partList);
+
+    // 枠線の描画
+    scheduleSheet.getRange(5,2, endOfMonth + 1, 6 + staffList[0].length + partList[0].length).setBorder(true,true,true,true,true,true);
+
+    // 社員とパートのシフトの参照と結合
+    var staffShifts = staffSheet.getRange(2,2, 7,staffList[0].length).getValues();
+    var partShifts = partSheet.getRange(2,2, 7,partList[0].length).getValues();
+
+    var allShifts = staffShifts;
+    for(var i=0; i<7 ; i++){
+      for(var j=0; j<partList[0].length ; j++){
+        allShifts[i].push(partShifts[i][j]);
+      }
+    }
+    
+    // 31日分の二次元配列を作る
+    var startDay = scheduleSheet.getRange(6,3).getValue();
+    var startDayOfWeek = getDayOfWeekRow(staffSheet, startDay);
+
+    var monthlyShift = [];
+    for(var i=0; i < endOfMonth ; i++){
+      var day = (startDayOfWeek + i) % 7;
+      monthlyShift.push(allShifts[day]);
+    }
+
+    // 二次元配列の貼り付け
+    scheduleSheet.getRange(6,8, endOfMonth,staffList[0].length + partList[0].length).setValues(monthlyShift);
+
+    // チェックボックス配置
+    scheduleSheet.getRange(5,scheduleSheet.getLastColumn() + 1).setValue("確認");
+    scheduleSheet.getRange(6,scheduleSheet.getLastColumn(), endOfMonth).insertCheckboxes();
+
+    // 責任者check -> coming soon...
+
+    // 日曜日の下に行を追加
+    insertBlank(scheduleSheet, endOfMonth);
+
+    // シートをコピー
+    var sheetName = thisMonth + "月";
+    var copySheet = scheduleSheet.copyTo(ss);
+    if(ss.getSheetByName(sheetName) == null){
+      copySheet.setName(sheetName);
+    }else{
+      Browser.msgBox("すでに" + sheetName + "のシートがあります！\\n" + sheetName + today.getDay() + "で作成します。\\n※dailyの前日・翌日でエラーが出るので名前を'〇月'にしてください。");
+      copySheet.setName(sheetName + today.getDay());
+    }
+    
+    copySheet.activate();
+    
+  }else if(result == "cancel"){
+    return;
+  }else if(thisMonth < 1 || thisMonth > 12){
+    Browser.msgBox("月を正しく入力してください\\n");
+  }else{
+    return;
+  }
+}
+
+function acceptRequest(){
+  var result = Browser.msgBox("希望シフトを適用します\\n\\n※基本シフトを作成してから適用してください", Browser.Buttons.OK_CANCEL);
+  if (result == "ok"){
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // get all shift
+    const scheduleSheet = ss.getActiveSheet();
+    const lastRow = scheduleSheet.getLastRow();
+    const lastColumn = scheduleSheet.getLastColumn();
+    const shiftsAll = scheduleSheet.getRange(5,2, lastRow - 4, lastColumn - 2).getValues();
+
+    // get request
+    const requestSheet = ss.getSheetByName('request');
+    const lastRowR = requestSheet.getLastRow();
+    const lastColumnR = requestSheet.getLastColumn();
+    // filter request sheet
+    const year = scheduleSheet.getRange(2,1).getValue();
+    const month = scheduleSheet.getRange(2,2).getValue();
+
+    // 全てのデータを配列に保存する（データが増えるだけ負荷重い -> 改善事項）
+    var requests = requestSheet.getRange(2,1, lastRowR -1, lastColumnR).getValues();
+    for(var i=0; i < lastRowR-1; i++){ // i:希望シフトの回答
+      //console.log(requests[i][2].getMonth());
+      if(requests[i][2].getMonth() == month - 1){
+        for(var j=1; j < lastRow-4; j++){ // j:日付
+          if(requests[i][2].getDate() == shiftsAll[j][0]){
+            for(var k=1; k < lastColumn - 1; k++){ // k:職員名
+              if(requests[i][1] == shiftsAll[0][k]){
+                scheduleSheet.getRange(j+5,k+2).setValue(requests[i][3]);
+                scheduleSheet.getRange(j+5,k+2).setBackground("#fbbc04");
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }else{
+    return;
+  }
+}
+
+function test(){
+  Browser.msgBox("開発用！Don't touch!");
+  //acceptRequest();
+}
+
+function shiftOk(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dailySheet = ss.getActiveSheet();
+  var thisMonth = dailySheet.getRange(1,1).getValue();
+  var sheetMonth = thisMonth + "月";
+  const scheduleSheet = ss.getSheetByName(sheetMonth);
+  var day = dailySheet.getRange(1,3).getValue();
+  const date = scheduleSheet.getRange(6,2, scheduleSheet.getLastRow() - 5, 1).getValues();
+
+  // 隙間のズレ修正
+  for(var i=0; i<date.length ; i++){
+    if(date[i] == day){
+      day = i + 1;
+      break;
+    }
+  }
+
+  scheduleSheet.getRange(5 + day, scheduleSheet.getLastColumn()).check();
+  Browser.msgBox("確認できました！\\nお疲れ様！");
+}
+
+function nextDailyShift(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dailySheet = ss.getActiveSheet();
+  var thisMonth = dailySheet.getRange(1,1).getValue();
+  const endOfMonth = getEndOfMonth(thisMonth);
+  var sheetMonth = thisMonth + "月";
+  const scheduleSheet = ss.getSheetByName(sheetMonth);
+  var day = dailySheet.getRange(1,3).getValue();
+  day++;
+
+  if(day > endOfMonth){
+    Browser.msgBox("月の最終日です。");
+    return;
+  }
+
+  dailyShiftHelper(ss, scheduleSheet, thisMonth, day);
+ 
+}
+
+function prevDailyShift(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dailySheet = ss.getActiveSheet();
+  var thisMonth = dailySheet.getRange(1,1).getValue();
+  var sheetMonth = thisMonth + "月";
+  const scheduleSheet = ss.getSheetByName(sheetMonth);
+  var day = dailySheet.getRange(1,3).getValue();
+  day--;
+
+  if(day < 1){
+    Browser.msgBox("月の初日です。");
+    return;
+  }
+
+  dailyShiftHelper(ss, scheduleSheet, thisMonth, day);
+ 
+}
+
+function dailyShift(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const scheduleSheet = ss.getActiveSheet();
+  const thisMonth = scheduleSheet.getRange(2,2).getValue();
+  const endOfMonth = getEndOfMonth(thisMonth);
+
+  var day = Browser.inputBox("確認する日を入力してください\\n(数字のみ・半角入力)\\n\\n※格子の外に何か入力しているとエラーになります！", Browser.Buttons.OK_CANCEL);
+  if(day == "cancel") return;
+  day = Number(day);
+  if(isNaN(day) || day < 1 || day > endOfMonth){
+    Browser.msgBox("日付を正しく入力してください\\n\\n例1) 3\\n例2) 12");
+    return;
+  }else{
+    dailyShiftHelper(ss, scheduleSheet, thisMonth, day);
+  }
+}
+
+function dailyShiftHelper(ss, scheduleSheet, thisMonth, day){
+  const lastColumn = scheduleSheet.getLastColumn() - 1;
+  var staff = scheduleSheet.getRange(5,8, 1,lastColumn - 7).getValues();
+  const dailySheet = ss.getSheetByName('daily');
+  const date = scheduleSheet.getRange(6,2, scheduleSheet.getLastRow() - 5, 1).getValues();
+
+  clearDailyHelper(); // シートをクリア
+  dailySheet.getRange(1,3).setValue(day); // 指定した日付をコピー
+
+  // 隙間の分ズレ修正
+  for(var i=0; i<date.length ; i++){
+    if(date[i] == day){
+      day = i + 1;
+      break;
+    }
+  }
+
+  // シフトのメンバーとシフトの行を列に変換して転写
+  var dailyShifts = scheduleSheet.getRange(5 + day,8, 1,staff[0].length).getValues();
+  var dailyShiftsColor = scheduleSheet.getRange(5 + day,8, 1,staff[0].length).getBackgrounds();
+  var staffVertical = [];
+  var dailyShiftsVertical = [];
+  var changedShifts = [];
+  var j=0;
+  for(var i=0; i<staff[0].length; i++){
+    if(dailyShifts[0][i] != "休"){
+      staffVertical[j] = [staff[0][i]];
+      dailyShiftsVertical[j] = [dailyShifts[0][i]];
+      if(dailyShiftsColor[0][i] == "#fbbc04") changedShifts[j] = 1;
+      else changedShifts[j] = 0;
+      j++;
+    }
+  }
+  dailySheet.getRange(1,1).setValue(thisMonth);
+  dailySheet.getRange(3,1, staffVertical.length, 1).setValues(staffVertical);
+  dailySheet.getRange(3,2, staffVertical.length, 1).setValues(dailyShiftsVertical);
+  
+  // 変更シフトを色付け
+  for(var i=0; i<=staffVertical.length; i++){
+    if(changedShifts[i] == 1){
+      dailySheet.getRange(3 + i,2).setBackground("#fbbc04");
+    }
+  }
+
+  // 0で敷き詰めた配列を作り、シフトがあるコマは1にする
+  const shiftBlocks = shiftTime();
+  var fillShifts = []; // [[staffVertical.length],[26]]
+
+  for(var i=0; i < staffVertical.length; i++){
+    fillShifts.push([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+  }
+
+  for(var i=0; i < staffVertical.length ; i++){ // i + 1列目
+    var shift = dailyShiftsVertical[i];
+    for(var j=0; j < 28 ; j++){ // j + 1行目
+      if(j >= shiftBlocks[shift][0] && j <= shiftBlocks[shift][1]){
+        fillShifts[i][j] += 1;
+      }
+    }
+  }
+
+  dailySheet.getRange(3,4, fillShifts.length, 28).setValues(fillShifts);
+
+  dailySheet.activate();
+}
+
+function clearDailyHelper(){
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dailySheet = ss.getSheetByName('daily');
+  var lastRow = dailySheet.getLastRow();
+  dailySheet.getRange(3,1, lastRow-1, 32).clearContent();
+  dailySheet.getRange(3,1, lastRow-1, 32).setBackground(null);
+}
+
+function clearDaily(){
+  var res = Browser.msgBox("シフトを削除します", Browser.Buttons.OK_CANCEL);
+  if (res == "ok"){
+    clearDailyHelper();
+  }else{
+    return;
+  }
+}
+
+function shiftTime(){ // シフト名と塗りつぶすコマ数の連想配列を作成 {"早1":[3,16], }
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName('shift');
+  const shiftTimes = sheet.getRange(1,1, sheet.getLastRow(), 3).getValues();
+  var shiftBlocks = {};
+
+  for(var i=0; i < shiftTimes.length ; i++){
+    shiftBlocks[shiftTimes[i][0]] = [shiftTimes[i][1], shiftTimes[i][2]];
+  }
+
+  return shiftBlocks;
+}
+
+function insertBlank(sheet, endOfMonth){
+  var dayOfWeeks = sheet.getRange(7,3, endOfMonth,1).getValues();
+  var sundays = [];
+  for(var i=0; i<endOfMonth; i++){
+    if(dayOfWeeks[i][0] === '月'){
+      sundays.push(i+7);
+    }
+  }
+
+  for(var i=0; i < sundays.length; i++){
+    sheet.insertRows(sundays[i] + i, 1);
+    sheet.getRange(sundays[i] + i,2, 1,sheet.getLastColumn()-1).setBackground('#c0c0c0');
+  }
+  
+}
+
+function clearSheet(){
+  var result = Browser.msgBox("スケジュールを削除します\\n\\n※シートが空の時はキャンセルしてください", Browser.Buttons.OK_CANCEL);
+  if(result == 'ok'){
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getActiveSheet();
+    var lastColumn = sheet.getLastColumn();
+    var thisMonth = sheet.getRange(2,2).getValue();
+    var endOfMonth = getEndOfMonth(thisMonth);
+
+    sheet.getRange(5,2, sheet.getLastRow(), lastColumn).setBorder(false,false,false,false,false,false); // 格子削除
+    if(lastColumn > 7){
+      sheet.getRange(5,8, 37, lastColumn-7).clearContent(); // シフト削除
+    }
+    sheet.getRange(6,2, 36, 1).clearContent(); // 日付削除
+
+    var dayOfWeeks = sheet.getRange(6,3, 35, 1).getValues();
+    for(var i=dayOfWeeks.length ; i >= 0 ; i--){
+      if(dayOfWeeks[i] == ""){
+        sheet.deleteRow(i + 6); // 隙間行削除
+      }
+    }
+    sheet.getRange(5,7, endOfMonth+1, 1).setBackground(null); // 隙間の色消し
+    sheet.getRange(6,lastColumn, endOfMonth, 1).removeCheckboxes();
+    sheet.getRange(6,7, endOfMonth+1, lastColumn -7).setBackground(null); // シフト変更分の色消し
+
+  }else{
+    return;
+  }
+}
+
+function getDayOfWeekRow(sheet, day){
+  var dayOfWeek = sheet.getRange(2,1,7,1).getValues();
+
+  for(var i=0; i<7 ;i++){
+    if(dayOfWeek[i][0] == day) return i;
+  }
+  return 0;
+}
+
+function getEndOfMonth(month){
+  var today = new Date();
+  var endOfMonth = new Date(today.getFullYear(), month, 0);
+  return endOfMonth.getDate();
+}
